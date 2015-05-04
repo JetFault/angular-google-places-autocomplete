@@ -17,15 +17,14 @@
     <script src="../src/autocomplete.js"></script>
 
     <script>
-        angular.module('example', ['ngTouch', 'google.places'])
+        angular.module('example', ['google.places'])
 
                 // Setup a basic controller with a scope variable 'place'
                 .controller('MainCtrl', function ($scope) {
                     $scope.place = null;
 
                     $scope.autocompleteOptions = {
-                        componentRestrictions: { country: 'au' },
-                        types: ['geocode']
+                        types: ['(regions)']
                     }
                 });
     </script>

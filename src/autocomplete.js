@@ -6,7 +6,7 @@
  * https://github.com/kuhnza/angular-google-places-autocomplete/blob/master/LICENSE
  */
 
- 'use strict';
+'use strict';
 
 angular.module('google.places', [])
 	/**
@@ -14,11 +14,71 @@ angular.module('google.places', [])
 	 *
 	 * Note: requires the Google Places API to already be loaded on the page.
 	 */
-	.factory('googlePlacesApi', ['$window', function ($window) {
-        if (!$window.google) throw 'Global `google` var missing. Did you forget to include the places API script?';
+  .provider('googlePlacesApi', [function () {
+      this.options = {
+          libraries: 'places',
+          v: '3.17'
+      };
 
-		return $window.google;
-	}])
+      this.configure = function(opts) {
+          angular.extend(this.options, opts);
+      };
+
+      var _this = this;
+      this.$get = ['gPlacesApiLoader', function (loader) {
+          return loader.load(_this.options);
+      }];
+  }])
+
+  .factory('gPlacesApiLoader', [ '$q', '$window', '$document', function ($q, $window, $document) {
+      var scriptId;
+
+      function isLibLoaded () {
+          return angular.isDefined($window.google) && angular.isDefined($window.google.maps) && angular.isDefined($window.google.maps.places);
+      }
+
+      function includeScript (opts) {
+          var script,
+              query = [];
+
+          angular.forEach(opts, function(value, key) {
+            query.push(key + '=' + value);
+          });
+          query = query.join('&');
+
+          if (scriptId) {
+            angular.element('#' + scriptId).remove();
+          }
+
+          script = $document[0].createElement('script');
+          script.id = scriptId = 'google_map_lib_load' + (Math.round(Math.random() * 1000));
+          script.type = 'text/javascript';
+          script.src = 'https://maps.googleapis.com/maps/api/js?' + query;
+          return $document[0].body.appendChild(script);
+      }
+
+      return {
+          load: function(opts) {
+              var deferred = $q.defer(),
+                  randCallback;
+
+              if (isLibLoaded()) {
+                  deferred.resolve($window.google);
+                  return deferred.promise;
+              }
+
+              randCallback = opts.callback = 'onGoogleMapsReady' + Math.round(Math.random() * 1000);
+              $window[randCallback] = function () {
+                  $window[randCallback] = null;
+                  deferred.resolve($window.google);
+              };
+
+              includeScript(opts);
+
+              return deferred.promise;
+          }
+      };
+  }])
 
 	/**
 	 * Autocomplete directive. Use like this:
@@ -27,7 +87,7 @@ angular.module('google.places', [])
 	 */
 	.directive('gPlacesAutocomplete',
         [ '$parse', '$compile', '$timeout', '$document', 'googlePlacesApi',
-        function ($parse, $compile, $timeout, $document, google) {
+        function ($parse, $compile, $timeout, $document, googleApi) {
 
             return {
                 restrict: 'A',
@@ -48,19 +108,27 @@ angular.module('google.places', [])
                             down: 40
                         },
                         hotkeys = [keymap.tab, keymap.enter, keymap.esc, keymap.up, keymap.down],
-                        autocompleteService = new google.maps.places.AutocompleteService(),
-                        placesService = new google.maps.places.PlacesService(element[0]);
+                        autocompleteService,
+                        placesService,
+                        google;
 
-                    (function init() {
-                        $scope.query = '';
-                        $scope.predictions = [];
-                        $scope.input = element;
-                        $scope.options = $scope.options || {};
+                    googleApi.then(function(googleApi) {
+                        google = googleApi;
+                        autocompleteService = new googleApi.maps.places.AutocompleteService();
+                        placesService = new googleApi.maps.places.PlacesService(element[0]);
+                        
+                        (function init() {
+                            $scope.query = '';
+                            $scope.predictions = [];
+                            $scope.input = element;
+                            $scope.options = $scope.options || {};
 
-                        initAutocompleteDrawer();
-                        initEvents();
-                        initNgModelController();
-                    }());
+                            initAutocompleteDrawer();
+                            initEvents();
+                            initNgModelController();
+                        }());
+                    });
+
 
                     function initEvents() {
                         element.bind('keydown', onKeydown);
